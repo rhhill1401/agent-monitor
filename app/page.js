@@ -1,11 +1,11 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 const styles = {
-  container: { background: '#0d1117', minHeight: '100vh', color: '#c9d1d9', padding: '20px' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', borderBottom: '1px solid #30363d', paddingBottom: '20px' },
-  title: { fontSize: '28px', fontWeight: 'bold', color: '#58a6ff' },
-  stats: { display: 'flex', gap: '30px' },
+  container: { background: '#0d1117', minHeight: '100vh', color: '#c9d1d9', padding: '20px', fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif' },
+  header: { marginBottom: '30px', borderBottom: '1px solid #30363d', paddingBottom: '20px' },
+  title: { fontSize: '24px', fontWeight: 'bold', color: '#58a6ff', whiteSpace: 'nowrap', flexShrink: 0 },
   stat: { textAlign: 'center' },
   statNumber: { fontSize: '32px', fontWeight: 'bold' },
   statLabel: { fontSize: '12px', color: '#8b949e' },
@@ -14,7 +14,7 @@ const styles = {
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
   agentName: { fontSize: '18px', fontWeight: '600', color: '#c9d1d9' },
   pulse: { width: '12px', height: '12px', borderRadius: '50%', animation: 'pulse 2s infinite' },
-  status: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' },
+  status: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '600' },
   schedule: { color: '#8b949e', fontSize: '13px', marginBottom: '10px' },
   lastRun: { color: '#8b949e', fontSize: '12px' },
   expanded: { marginTop: '15px', padding: '15px', background: '#0d1117', borderRadius: '8px', fontSize: '13px' },
@@ -22,7 +22,8 @@ const styles = {
   progressTitle: { fontSize: '18px', fontWeight: '600', marginBottom: '15px' },
   progressBar: { height: '24px', background: '#30363d', borderRadius: '12px', overflow: 'hidden', marginBottom: '10px' },
   progressFill: { height: '100%', background: 'linear-gradient(90deg, #238636, #2ea043)', borderRadius: '12px', transition: 'width 0.5s' },
-  progressLabel: { display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#8b949e' }
+  progressLabel: { display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#8b949e' },
+  refreshIndicator: { fontSize: '12px', color: '#8b949e', display: 'flex', alignItems: 'center', gap: '6px' }
 };
 
 const pulseKeyframes = `
@@ -36,105 +37,253 @@ const pulseKeyframes = `
   }
 `;
 
+// Fetch functions
+const fetchAgents = async () => {
+  const res = await fetch('/api/agents');
+  if (!res.ok) throw new Error('Failed to fetch agents');
+  return res.json();
+};
+
+const fetchProgress = async () => {
+  const res = await fetch('/api/progress');
+  if (!res.ok) throw new Error('Failed to fetch progress');
+  return res.json();
+};
+
 export default function AgentMonitor() {
-  const [agents, setAgents] = useState([]);
   const [expanded, setExpanded] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [goals, setGoals] = useState({ xFollowers: 31, xGoal: 100, ytSubs: 100, ytGoal: 200 });
+  const [expandedGoal, setExpandedGoal] = useState(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await fetch('/api/agents');
-        const data = await res.json();
-        setAgents(data.agents || []);
-        if (data.goals) setGoals(data.goals);
-      } catch (e) {
-        console.error(e);
-      }
-      setLoading(false);
-    };
-    fetchData();
-    const interval = setInterval(fetchData, 5000); // Poll every 5 seconds
-    return () => clearInterval(interval);
-  }, []);
+  // TanStack Query - auto-refetches every 30s, stale after 10s
+  const { data: agentData, isLoading: agentsLoading, isFetching: agentsFetching } = useQuery({
+    queryKey: ['agents'],
+    queryFn: fetchAgents,
+    refetchInterval: 30000,
+    staleTime: 10000,
+  });
 
-  const getStatusColor = (agent) => {
-    if (!agent.enabled) return '#f85149'; // Red - disabled
-    const lastRun = agent.state?.lastRunAtMs;
-    if (!lastRun) return '#8b949e'; // Gray - never run
-    const minsSinceRun = (Date.now() - lastRun) / 60000;
-    if (minsSinceRun < 5) return '#3fb950'; // Green - just ran
-    if (minsSinceRun < 60) return '#d29922'; // Yellow - ran within hour
-    return '#f85149'; // Red - stale
+  const { data: progressData, isLoading: progressLoading, isFetching: progressFetching } = useQuery({
+    queryKey: ['progress'],
+    queryFn: fetchProgress,
+    refetchInterval: 30000,
+    staleTime: 10000,
+  });
+
+  const agents = agentData?.agents || [];
+  const goals = {
+    xFollowers: progressData?.goals?.xFollowers?.current || 35,
+    xGoal: progressData?.goals?.xFollowers?.target || 100,
+    ytSubs: progressData?.goals?.youtubeSubs?.current || 108,
+    ytGoal: progressData?.goals?.youtubeSubs?.target || 300
+  };
+  const dailyGoals = progressData?.dailyGoals || {};
+  const lastUpdated = progressData?.lastUpdated;
+  const loading = agentsLoading || progressLoading;
+  const isFetching = agentsFetching || progressFetching;
+
+  const getStatusInfo = (agent) => {
+    // Handle both old format (state.lastStatus) and new format (status)
+    const status = agent.status || agent.state?.lastStatus;
+    const lastError = agent.lastError || agent.state?.lastError;
+    
+    if (status === 'error' || lastError) {
+      return { color: '#f85149', text: 'ERROR', icon: '🔴' };
+    }
+    
+    // Handle both formats for lastRun
+    const lastRunMs = agent.state?.lastRunAtMs;
+    const lastRunStr = agent.lastRun;
+    
+    if (lastRunMs && (Date.now() - lastRunMs) < 60000) {
+      return { color: '#3fb950', text: 'RUNNING', icon: '🟢' };
+    }
+    
+    // If we have a lastRun string or lastRunMs, agent has run
+    if (status === 'ok' || lastRunStr || lastRunMs) {
+      return { color: '#3fb950', text: 'ACTIVE', icon: '🟢' };
+    }
+    
+    const nextRun = agent.state?.nextRunAtMs;
+    if (nextRun && nextRun > Date.now()) {
+      return { color: '#d29922', text: 'SCHEDULED', icon: '⏰' };
+    }
+    if (nextRun && nextRun < Date.now()) {
+      return { color: '#f85149', text: 'OVERDUE', icon: '🔴' };
+    }
+    if (!lastRun) {
+      return { color: '#d29922', text: 'SCHEDULED', icon: '⏰' };
+    }
+    return { color: '#8b949e', text: 'IDLE', icon: '💤' };
   };
 
-  const getStatusText = (agent) => {
-    if (!agent.enabled) return 'DISABLED';
-    const lastRun = agent.state?.lastRunAtMs;
-    if (!lastRun) return 'PENDING';
-    const minsSinceRun = (Date.now() - lastRun) / 60000;
-    if (minsSinceRun < 5) return 'ACTIVE';
-    if (minsSinceRun < 60) return 'IDLE';
-    return 'STALE';
-  };
-
-  const formatTime = (ms) => {
+  const formatTime = (ms, lastRunStr) => {
+    // Handle string format (e.g., "10:40 AM")
+    if (lastRunStr && typeof lastRunStr === 'string') return lastRunStr;
+    // Handle timestamp format
     if (!ms) return 'Never';
-    const d = new Date(ms);
-    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    return new Date(ms).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
-  const activeCount = agents.filter(a => a.enabled && a.state?.lastRunAtMs && (Date.now() - a.state.lastRunAtMs) < 300000).length;
-  const idleCount = agents.filter(a => a.enabled && (!a.state?.lastRunAtMs || (Date.now() - a.state.lastRunAtMs) >= 300000)).length;
-  const disabledCount = agents.filter(a => !a.enabled).length;
+  const formatNextRun = (ms) => {
+    if (!ms) return 'Not scheduled';
+    const diff = ms - Date.now();
+    if (diff < 0) return 'Overdue';
+    if (diff < 60000) return 'Less than 1 min';
+    if (diff < 3600000) return `In ${Math.round(diff/60000)} min`;
+    return `In ${Math.round(diff/3600000)}h`;
+  };
+
+  const runningCount = agents.filter(a => getStatusInfo(a).text === 'RUNNING' || getStatusInfo(a).text === 'ACTIVE').length;
+  const idleCount = agents.filter(a => getStatusInfo(a).text === 'IDLE' || getStatusInfo(a).text === 'SCHEDULED').length;
+  const errorCount = agents.filter(a => getStatusInfo(a).text === 'ERROR' || getStatusInfo(a).text === 'OVERDUE').length;
 
   return (
     <div style={styles.container}>
       <style>{pulseKeyframes}</style>
       
       <header style={styles.header}>
-        <h1 style={styles.title}>🐙 Agent Monitor</h1>
-        <div style={styles.stats}>
+        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px'}}>
+          <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+            <h1 style={styles.title}>🐙 Agent Monitor</h1>
+            {isFetching && (
+              <div style={styles.refreshIndicator}>
+                <div style={{ width: '10px', height: '10px', border: '2px solid #30363d', borderTopColor: '#58a6ff', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                <span>Syncing...</span>
+              </div>
+            )}
+          </div>
+          <nav style={{display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
+            <a href="/generate" style={{color: 'white', textDecoration: 'none', padding: '8px 12px', background: '#238636', borderRadius: '6px', fontSize: '14px', fontWeight: '600'}}>🎬 Generate</a>
+            <a href="/images" style={{color: '#58a6ff', textDecoration: 'none', padding: '8px 12px', background: '#21262d', borderRadius: '6px', fontSize: '14px'}}>🎨 Images</a>
+            <a href="/todos" style={{color: '#58a6ff', textDecoration: 'none', padding: '8px 12px', background: '#21262d', borderRadius: '6px', fontSize: '14px'}}>✅ Todos</a>
+            <a href="/upload" style={{color: '#58a6ff', textDecoration: 'none', padding: '8px 12px', background: '#21262d', borderRadius: '6px', fontSize: '14px'}}>📚 Upload</a>
+            <a href="/rules" style={{color: '#58a6ff', textDecoration: 'none', padding: '8px 12px', background: '#21262d', borderRadius: '6px', fontSize: '14px'}}>📋 Rules</a>
+            <a href="/skills" style={{color: '#58a6ff', textDecoration: 'none', padding: '8px 12px', background: '#21262d', borderRadius: '6px', fontSize: '14px'}}>⚡ Skills</a>
+            <a href="/memory" style={{color: '#58a6ff', textDecoration: 'none', padding: '8px 12px', background: '#21262d', borderRadius: '6px', fontSize: '14px'}}>🧠 Memory</a>
+          </nav>
+        </div>
+        <div style={{display: 'flex', justifyContent: 'space-around', marginTop: '15px', padding: '12px', background: '#161b22', borderRadius: '8px'}}>
           <div style={styles.stat}>
-            <div style={{...styles.statNumber, color: '#3fb950'}}>{activeCount}</div>
-            <div style={styles.statLabel}>ACTIVE</div>
+            <div style={{...styles.statNumber, color: '#3fb950', fontSize: '24px'}}>{runningCount}</div>
+            <div style={styles.statLabel}>RUNNING</div>
           </div>
           <div style={styles.stat}>
-            <div style={{...styles.statNumber, color: '#d29922'}}>{idleCount}</div>
+            <div style={{...styles.statNumber, color: '#8b949e', fontSize: '24px'}}>{idleCount}</div>
             <div style={styles.statLabel}>IDLE</div>
           </div>
           <div style={styles.stat}>
-            <div style={{...styles.statNumber, color: '#f85149'}}>{disabledCount}</div>
-            <div style={styles.statLabel}>DISABLED</div>
+            <div style={{...styles.statNumber, color: '#f85149', fontSize: '24px'}}>{errorCount}</div>
+            <div style={styles.statLabel}>ERRORS</div>
           </div>
         </div>
       </header>
 
       {/* Progress toward goals */}
-      <div style={styles.progress}>
-        <div style={styles.progressTitle}>📈 Progress to Goals</div>
-        <div style={{ marginBottom: '20px' }}>
-          <div style={{ marginBottom: '5px', fontWeight: '500' }}>X Followers: {goals.xFollowers} / {goals.xGoal}</div>
-          <div style={styles.progressBar}>
-            <div style={{...styles.progressFill, width: `${(goals.xFollowers/goals.xGoal)*100}%`}}></div>
+      {(() => {
+        const deadline = new Date('2026-02-22T23:59:59');
+        const now = new Date();
+        const daysLeft = Math.max(1, Math.ceil((deadline - now) / (1000 * 60 * 60 * 24)));
+        const xNeeded = goals.xGoal - goals.xFollowers;
+        const xPerDay = Math.ceil(xNeeded / daysLeft);
+        const xOnTrack = xPerDay <= 15;
+        const xStatus = xOnTrack ? '🟢 ON TRACK' : xPerDay <= 20 ? '🟡 BEHIND' : '🔴 AT RISK';
+        
+        const ytDeadline = new Date('2026-03-01T23:59:59');
+        const ytDaysLeft = Math.max(1, Math.ceil((ytDeadline - now) / (1000 * 60 * 60 * 24)));
+        const ytNeeded = goals.ytGoal - goals.ytSubs;
+        const ytPerDay = Math.ceil(ytNeeded / ytDaysLeft);
+        const ytOnTrack = ytPerDay <= 10;
+        const ytStatus = ytOnTrack ? '🟢 ON TRACK' : ytPerDay <= 15 ? '🟡 BEHIND' : '🔴 AT RISK';
+
+        return (
+          <div style={styles.progress}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
+              <span style={styles.progressTitle}>📈 Progress to Goals</span>
+              {lastUpdated && <span style={{fontSize: '12px', color: '#8b949e'}}>Updated: {new Date(lastUpdated).toLocaleTimeString()}</span>}
+            </div>
+            
+            <div style={{ marginBottom: '25px', padding: '15px', background: '#0d1117', borderRadius: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <span style={{ fontWeight: '600' }}>X Followers: {goals.xFollowers} / {goals.xGoal}</span>
+                <span style={{ fontSize: '14px', fontWeight: '600' }}>{xStatus}</span>
+              </div>
+              <div style={styles.progressBar}>
+                <div style={{...styles.progressFill, width: `${(goals.xFollowers/goals.xGoal)*100}%`, background: xOnTrack ? 'linear-gradient(90deg, #238636, #2ea043)' : 'linear-gradient(90deg, #d29922, #f0883e)'}}></div>
+              </div>
+              <div style={{...styles.progressLabel, marginTop: '8px'}}>
+                <span>{Math.round((goals.xFollowers/goals.xGoal)*100)}%</span>
+                <span style={{color: xOnTrack ? '#3fb950' : '#d29922'}}>{xNeeded} needed • {xPerDay}/day • {daysLeft} days left (Feb 22)</span>
+              </div>
+            </div>
+            
+            <div style={{ padding: '15px', background: '#0d1117', borderRadius: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <span style={{ fontWeight: '600' }}>YouTube Subs: {goals.ytSubs} / {goals.ytGoal}</span>
+                <span style={{ fontSize: '14px', fontWeight: '600' }}>{ytStatus}</span>
+              </div>
+              <div style={styles.progressBar}>
+                <div style={{...styles.progressFill, width: `${(goals.ytSubs/goals.ytGoal)*100}%`}}></div>
+              </div>
+              <div style={{...styles.progressLabel, marginTop: '8px'}}>
+                <span>{Math.round((goals.ytSubs/goals.ytGoal)*100)}%</span>
+                <span style={{color: ytOnTrack ? '#3fb950' : '#d29922'}}>{ytNeeded} needed • {ytPerDay}/day • {ytDaysLeft} days left (Mar 1)</span>
+              </div>
+            </div>
           </div>
-          <div style={styles.progressLabel}>
-            <span>{Math.round((goals.xFollowers/goals.xGoal)*100)}% complete</span>
-            <span>{goals.xGoal - goals.xFollowers} to go</span>
+        );
+      })()}
+
+      {/* Daily Goals - Dynatrace Style */}
+      {(() => {
+        const goalDefinitions = [
+          { key: 'contacts', label: '👥 Influencer Contacts', target: 20, current: dailyGoals.contacts?.current || 0, description: 'DMs, replies, or comments sent to influencers today', actions: ['Reply to parenting accounts on X', 'Comment on competitor videos', 'DM micro-influencers (1K-50K)', 'Engage with #BlackParenting posts'] },
+          { key: 'responses', label: '💬 Responses Received', target: 2, current: dailyGoals.responses?.current || 0, description: 'Replies or follow-backs from people we contacted', actions: ['Track replies to our DMs', 'Monitor follow-backs', 'Check comment replies', 'Log any collab interest'] },
+          { key: 'xFollowers', label: '📈 New X Followers', target: 16, current: dailyGoals.xFollowers?.current || 3, description: 'Net new followers on @RomesStorybook today', actions: ['Post native video content', 'Engage with target accounts', 'Reply to trending topics', 'Use #TrapNursery'] },
+          { key: 'ytSubs', label: '🔔 New YouTube Subs', target: 17, current: dailyGoals.ytSubs?.current || 8, description: 'Net new subscribers today (17/day for 300 by Mar 1)', actions: ['Post Shorts with strong hooks', 'Dance Party at 7 PM', 'Optimize titles per SEO guide', 'Cross-promote from X'] },
+          { key: 'posts', label: '📝 Posts Published', target: 3, current: dailyGoals.posts?.current || 0, description: 'Content pieces published across all platforms', actions: ['Morning X post with native video', 'YouTube: Dance Party at 7 PM', 'Evening engagement post on X'] },
+          { key: 'engagement', label: '🔥 Engagement Actions', target: 15, current: dailyGoals.engagement?.current || 0, description: 'Likes, replies, retweets done today', actions: ['Like 5 posts from target accounts', 'Reply genuinely to 5 posts', 'Retweet 3 relevant content', 'Follow 2 micro-creators'] },
+        ];
+        
+        return (
+          <div style={{...styles.progress, marginTop: '20px'}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
+              <span style={styles.progressTitle}>🎯 Today's Goals</span>
+              <span style={{fontSize: '12px', color: '#8b949e'}}>Click any box for details</span>
+            </div>
+            <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px'}}>
+              {goalDefinitions.map((goal) => {
+                const percent = Math.min(100, Math.round((goal.current / goal.target) * 100));
+                const status = percent >= 100 ? '#3fb950' : percent >= 50 ? '#d29922' : '#f85149';
+                const isExpanded = expandedGoal === goal.key;
+                return (
+                  <div key={goal.key} onClick={() => setExpandedGoal(isExpanded ? null : goal.key)}
+                    style={{padding: '15px', background: '#0d1117', borderRadius: '8px', borderLeft: `4px solid ${status}`, cursor: 'pointer', transition: 'all 0.2s', border: isExpanded ? `1px solid ${status}` : '1px solid transparent'}}>
+                    <div style={{fontSize: '13px', color: '#8b949e', marginBottom: '8px', fontWeight: '500'}}>{goal.label}</div>
+                    <div style={{display: 'flex', alignItems: 'baseline', gap: '4px'}}>
+                      <span style={{fontSize: '28px', fontWeight: 'bold', color: status}}>{goal.current}</span>
+                      <span style={{fontSize: '14px', color: '#8b949e'}}>/ {goal.target}</span>
+                    </div>
+                    <div style={{marginTop: '10px', height: '6px', background: '#30363d', borderRadius: '3px'}}>
+                      <div style={{height: '100%', width: `${percent}%`, background: status, borderRadius: '3px', transition: 'width 0.3s'}}></div>
+                    </div>
+                    {isExpanded && (
+                      <div style={{marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #30363d'}}>
+                        <div style={{fontSize: '12px', color: '#c9d1d9', marginBottom: '10px'}}>{goal.description}</div>
+                        <div style={{fontSize: '11px', color: '#8b949e'}}>
+                          <strong>Actions:</strong>
+                          <ul style={{margin: '8px 0 0 0', paddingLeft: '18px'}}>
+                            {goal.actions.map((action, i) => (<li key={i} style={{marginBottom: '4px'}}>{action}</li>))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-        <div>
-          <div style={{ marginBottom: '5px', fontWeight: '500' }}>YouTube Subs: {goals.ytSubs} / {goals.ytGoal}</div>
-          <div style={styles.progressBar}>
-            <div style={{...styles.progressFill, width: `${(goals.ytSubs/goals.ytGoal)*100}%`}}></div>
-          </div>
-          <div style={styles.progressLabel}>
-            <span>{Math.round((goals.ytSubs/goals.ytGoal)*100)}% complete</span>
-            <span>{goals.ytGoal - goals.ytSubs} to go</span>
-          </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: '50px' }}>
@@ -143,43 +292,40 @@ export default function AgentMonitor() {
         </div>
       ) : (
         <div style={{...styles.grid, marginTop: '20px'}}>
-          {agents.map((agent) => (
-            <div 
-              key={agent.id} 
-              style={{...styles.card, borderColor: expanded === agent.id ? '#58a6ff' : '#30363d'}}
-              onClick={() => setExpanded(expanded === agent.id ? null : agent.id)}
-            >
-              <div style={styles.cardHeader}>
-                <span style={styles.agentName}>{agent.name}</span>
-                <div style={styles.status}>
-                  <span>{getStatusText(agent)}</span>
-                  <div style={{...styles.pulse, backgroundColor: getStatusColor(agent)}}></div>
-                </div>
-              </div>
-              <div style={styles.schedule}>
-                ⏰ {agent.schedule?.kind === 'cron' ? agent.schedule.expr : 
-                    agent.schedule?.kind === 'every' ? `Every ${Math.round(agent.schedule.everyMs/60000)} min` : 
-                    'Unknown'}
-              </div>
-              <div style={styles.lastRun}>
-                Last run: {formatTime(agent.state?.lastRunAtMs)}
-                {agent.state?.lastStatus && ` • ${agent.state.lastStatus}`}
-              </div>
-              {expanded === agent.id && (
-                <div style={styles.expanded}>
-                  <div><strong>ID:</strong> {agent.id}</div>
-                  <div><strong>Next run:</strong> {formatTime(agent.state?.nextRunAtMs)}</div>
-                  <div><strong>Duration:</strong> {agent.state?.lastDurationMs ? `${(agent.state.lastDurationMs/1000).toFixed(1)}s` : 'N/A'}</div>
-                  {agent.state?.lastError && (
-                    <div style={{color: '#f85149', marginTop: '10px'}}><strong>Error:</strong> {agent.state.lastError}</div>
-                  )}
-                  <div style={{marginTop: '10px', padding: '10px', background: '#161b22', borderRadius: '6px', whiteSpace: 'pre-wrap', fontSize: '12px', maxHeight: '150px', overflow: 'auto'}}>
-                    <strong>Task:</strong><br/>{agent.payload?.message?.slice(0, 300)}...
+          {agents.map((agent) => {
+            const status = getStatusInfo(agent);
+            return (
+              <div key={agent.id} style={{...styles.card, borderColor: status.color, borderWidth: status.text === 'ERROR' || status.text === 'OVERDUE' ? '2px' : '1px'}}
+                onClick={() => setExpanded(expanded === agent.id ? null : agent.id)}>
+                <div style={styles.cardHeader}>
+                  <span style={styles.agentName}>{agent.name}</span>
+                  <div style={{...styles.status, color: status.color}}>
+                    <span>{status.text}</span>
+                    <div style={{...styles.pulse, backgroundColor: status.color}}></div>
                   </div>
                 </div>
-              )}
-            </div>
-          ))}
+                <div style={styles.schedule}>
+                  ⏰ {typeof agent.schedule === 'string' ? agent.schedule :
+                      agent.schedule?.kind === 'cron' ? agent.schedule.expr : 
+                      agent.schedule?.kind === 'every' ? `Every ${Math.round(agent.schedule.everyMs/60000)} min` : 'Unknown'}
+                </div>
+                <div style={styles.lastRun}>
+                  Last: {formatTime(agent.state?.lastRunAtMs, agent.lastRun)} • Next: {formatNextRun(agent.state?.nextRunAtMs)}
+                </div>
+                {expanded === agent.id && (
+                  <div style={styles.expanded}>
+                    <div><strong>ID:</strong> {agent.id?.slice(0,8)}...</div>
+                    <div><strong>Duration:</strong> {agent.state?.lastDurationMs ? `${(agent.state.lastDurationMs/1000).toFixed(1)}s` : 'N/A'}</div>
+                    {agent.state?.lastError && (
+                      <div style={{color: '#f85149', marginTop: '10px', padding: '10px', background: '#1c1c1c', borderRadius: '6px'}}>
+                        <strong>⚠️ Error:</strong> {agent.state.lastError}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
