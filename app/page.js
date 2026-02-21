@@ -253,7 +253,7 @@ export default function AgentMonitor() {
               </div>
             </div>
             
-            <div style={{ padding: '15px', background: '#0d1117', borderRadius: '8px' }}>
+            <div style={{ marginBottom: '25px', padding: '15px', background: '#0d1117', borderRadius: '8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                 <span style={{ fontWeight: '600' }}>YouTube Subs: {goals.ytSubs} / {ytTarget}</span>
                 <span style={{ fontSize: '14px', fontWeight: '600' }}>{ytStatus}</span>
@@ -266,6 +266,31 @@ export default function AgentMonitor() {
                 <span style={{color: ytOnTrack ? '#3fb950' : '#d29922'}}>{ytNeeded} needed • {ytPerDay}/day • {ytDaysLeft} days left (Mar 1)</span>
               </div>
             </div>
+            
+            {/* TikTok */}
+            {(() => {
+              const tkFollowers = progressData?.goals?.tiktokFollowers?.current || 12;
+              const tkTarget = 50;
+              const tkNeeded = tkTarget - tkFollowers;
+              const tkPerDay = Math.ceil(tkNeeded / xDaysLeft);
+              const tkOnTrack = tkPerDay <= 6;
+              const tkStatus = tkOnTrack ? '🟢 ON TRACK' : tkPerDay <= 10 ? '🟡 BEHIND' : '🔴 AT RISK';
+              return (
+                <div style={{ padding: '15px', background: '#0d1117', borderRadius: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <span style={{ fontWeight: '600' }}>TikTok Followers: {tkFollowers} / {tkTarget}</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600' }}>{tkStatus}</span>
+                  </div>
+                  <div style={styles.progressBar}>
+                    <div style={{...styles.progressFill, width: `${(tkFollowers/tkTarget)*100}%`, background: tkOnTrack ? 'linear-gradient(90deg, #238636, #2ea043)' : 'linear-gradient(90deg, #d29922, #f0883e)'}}></div>
+                  </div>
+                  <div style={{...styles.progressLabel, marginTop: '8px'}}>
+                    <span>{Math.round((tkFollowers/tkTarget)*100)}%</span>
+                    <span style={{color: tkOnTrack ? '#3fb950' : '#d29922'}}>{tkNeeded} needed • {tkPerDay}/day • {xDaysLeft} days left (Mar 1)</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
