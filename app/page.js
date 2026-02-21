@@ -178,54 +178,91 @@ export default function AgentMonitor() {
         </div>
       </header>
 
-      {/* Progress toward goals */}
+      {/* MILESTONE CARD - Road to 1K */}
       {(() => {
-        const deadline = new Date('2026-02-22T23:59:59');
+        const milestone1KDeadline = new Date('2026-04-01T23:59:59');
         const now = new Date();
-        const daysLeft = Math.max(1, Math.ceil((deadline - now) / (1000 * 60 * 60 * 24)));
-        const xNeeded = goals.xGoal - goals.xFollowers;
-        const xPerDay = Math.ceil(xNeeded / daysLeft);
-        const xOnTrack = xPerDay <= 15;
-        const xStatus = xOnTrack ? '🟢 ON TRACK' : xPerDay <= 20 ? '🟡 BEHIND' : '🔴 AT RISK';
+        const days1K = Math.max(1, Math.ceil((milestone1KDeadline - now) / (1000 * 60 * 60 * 24)));
+        const needed1K = 1000 - goals.ytSubs;
+        const perDay1K = Math.ceil(needed1K / days1K);
+        const onTrack1K = perDay1K <= 25;
+        const status1K = onTrack1K ? '🟢 ON TRACK' : perDay1K <= 30 ? '🟡 STRETCH' : '🔴 AGGRESSIVE';
+        const percent1K = Math.round((goals.ytSubs / 1000) * 100);
+
+        return (
+          <div style={{...styles.progress, background: 'linear-gradient(135deg, #161b22 0%, #1a2332 100%)', border: '1px solid #238636'}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
+              <span style={{...styles.progressTitle, color: '#58a6ff'}}>🚀 Road to 1K</span>
+              <span style={{fontSize: '14px', color: '#8b949e', fontStyle: 'italic'}}>The Big Goal</span>
+            </div>
+            
+            <div style={{ padding: '20px', background: '#0d1117', borderRadius: '12px', border: '1px solid #30363d' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ fontWeight: '700', fontSize: '18px', color: '#c9d1d9' }}>YouTube Subs: {goals.ytSubs} / 1,000</span>
+                <span style={{ fontSize: '14px', fontWeight: '600' }}>{status1K}</span>
+              </div>
+              <div style={{...styles.progressBar, height: '32px', background: '#21262d'}}>
+                <div style={{...styles.progressFill, width: `${percent1K}%`, background: 'linear-gradient(90deg, #238636, #2ea043, #3fb950)'}}></div>
+              </div>
+              <div style={{...styles.progressLabel, marginTop: '12px'}}>
+                <span style={{fontSize: '16px', fontWeight: '600', color: '#3fb950'}}>{percent1K}%</span>
+                <span style={{color: onTrack1K ? '#3fb950' : '#d29922'}}>{needed1K} needed • {perDay1K}/day • {days1K} days left (Apr 1)</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Progress toward monthly goals */}
+      {(() => {
+        const xDeadline = new Date('2026-03-01T23:59:59');
+        const now = new Date();
+        const xDaysLeft = Math.max(1, Math.ceil((xDeadline - now) / (1000 * 60 * 60 * 24)));
+        const xTarget = 100;
+        const xNeeded = xTarget - goals.xFollowers;
+        const xPerDay = Math.ceil(xNeeded / xDaysLeft);
+        const xOnTrack = xPerDay <= 10;
+        const xStatus = xOnTrack ? '🟢 ON TRACK' : xPerDay <= 15 ? '🟡 BEHIND' : '🔴 AT RISK';
         
         const ytDeadline = new Date('2026-03-01T23:59:59');
         const ytDaysLeft = Math.max(1, Math.ceil((ytDeadline - now) / (1000 * 60 * 60 * 24)));
-        const ytNeeded = goals.ytGoal - goals.ytSubs;
+        const ytTarget = 300;
+        const ytNeeded = ytTarget - goals.ytSubs;
         const ytPerDay = Math.ceil(ytNeeded / ytDaysLeft);
-        const ytOnTrack = ytPerDay <= 10;
-        const ytStatus = ytOnTrack ? '🟢 ON TRACK' : ytPerDay <= 15 ? '🟡 BEHIND' : '🔴 AT RISK';
+        const ytOnTrack = ytPerDay <= 25;
+        const ytStatus = ytOnTrack ? '🟢 ON TRACK' : ytPerDay <= 30 ? '🟡 BEHIND' : '🔴 AT RISK';
 
         return (
           <div style={styles.progress}>
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
-              <span style={styles.progressTitle}>📈 Progress to Goals</span>
+              <span style={styles.progressTitle}>📈 March Targets</span>
               {lastUpdated && <span style={{fontSize: '12px', color: '#8b949e'}}>Updated: {new Date(lastUpdated).toLocaleTimeString()}</span>}
             </div>
             
             <div style={{ marginBottom: '25px', padding: '15px', background: '#0d1117', borderRadius: '8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <span style={{ fontWeight: '600' }}>X Followers: {goals.xFollowers} / {goals.xGoal}</span>
+                <span style={{ fontWeight: '600' }}>X Followers: {goals.xFollowers} / {xTarget}</span>
                 <span style={{ fontSize: '14px', fontWeight: '600' }}>{xStatus}</span>
               </div>
               <div style={styles.progressBar}>
-                <div style={{...styles.progressFill, width: `${(goals.xFollowers/goals.xGoal)*100}%`, background: xOnTrack ? 'linear-gradient(90deg, #238636, #2ea043)' : 'linear-gradient(90deg, #d29922, #f0883e)'}}></div>
+                <div style={{...styles.progressFill, width: `${(goals.xFollowers/xTarget)*100}%`, background: xOnTrack ? 'linear-gradient(90deg, #238636, #2ea043)' : 'linear-gradient(90deg, #d29922, #f0883e)'}}></div>
               </div>
               <div style={{...styles.progressLabel, marginTop: '8px'}}>
-                <span>{Math.round((goals.xFollowers/goals.xGoal)*100)}%</span>
-                <span style={{color: xOnTrack ? '#3fb950' : '#d29922'}}>{xNeeded} needed • {xPerDay}/day • {daysLeft} days left (Feb 22)</span>
+                <span>{Math.round((goals.xFollowers/xTarget)*100)}%</span>
+                <span style={{color: xOnTrack ? '#3fb950' : '#d29922'}}>{xNeeded} needed • {xPerDay}/day • {xDaysLeft} days left (Mar 1)</span>
               </div>
             </div>
             
             <div style={{ padding: '15px', background: '#0d1117', borderRadius: '8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <span style={{ fontWeight: '600' }}>YouTube Subs: {goals.ytSubs} / {goals.ytGoal}</span>
+                <span style={{ fontWeight: '600' }}>YouTube Subs: {goals.ytSubs} / {ytTarget}</span>
                 <span style={{ fontSize: '14px', fontWeight: '600' }}>{ytStatus}</span>
               </div>
               <div style={styles.progressBar}>
-                <div style={{...styles.progressFill, width: `${(goals.ytSubs/goals.ytGoal)*100}%`}}></div>
+                <div style={{...styles.progressFill, width: `${(goals.ytSubs/ytTarget)*100}%`}}></div>
               </div>
               <div style={{...styles.progressLabel, marginTop: '8px'}}>
-                <span>{Math.round((goals.ytSubs/goals.ytGoal)*100)}%</span>
+                <span>{Math.round((goals.ytSubs/ytTarget)*100)}%</span>
                 <span style={{color: ytOnTrack ? '#3fb950' : '#d29922'}}>{ytNeeded} needed • {ytPerDay}/day • {ytDaysLeft} days left (Mar 1)</span>
               </div>
             </div>
