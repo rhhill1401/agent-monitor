@@ -82,16 +82,16 @@ export default function AgentMonitor() {
   const isFetching = agentsFetching || progressFetching;
 
   const getStatusInfo = (agent) => {
-    // Handle both old format (state.lastStatus) and new format (status)
-    const status = agent.status || agent.state?.lastStatus;
+    // Handle both old format (state.lastStatus) and new format (status/lastStatus)
+    const status = agent.status || agent.state?.lastStatus || agent.lastStatus;
     const lastError = agent.lastError || agent.state?.lastError;
     
     if (status === 'error' || lastError) {
       return { color: '#f85149', text: 'ERROR', icon: '🔴' };
     }
     
-    // Handle both formats for lastRun
-    const lastRunMs = agent.state?.lastRunAtMs;
+    // Handle both formats for lastRun (nested state or flat)
+    const lastRunMs = agent.state?.lastRunAtMs || agent.lastRunAtMs;
     const lastRunStr = agent.lastRun;
     
     if (lastRunMs && (Date.now() - lastRunMs) < 60000) {
@@ -103,14 +103,14 @@ export default function AgentMonitor() {
       return { color: '#3fb950', text: 'ACTIVE', icon: '🟢' };
     }
     
-    const nextRun = agent.state?.nextRunAtMs;
+    const nextRun = agent.state?.nextRunAtMs || agent.nextRunAtMs;
     if (nextRun && nextRun > Date.now()) {
       return { color: '#d29922', text: 'SCHEDULED', icon: '⏰' };
     }
     if (nextRun && nextRun < Date.now()) {
       return { color: '#f85149', text: 'OVERDUE', icon: '🔴' };
     }
-    if (!lastRun) {
+    if (!lastRunStr && !lastRunMs) {
       return { color: '#d29922', text: 'SCHEDULED', icon: '⏰' };
     }
     return { color: '#8b949e', text: 'IDLE', icon: '💤' };
@@ -372,7 +372,7 @@ export default function AgentMonitor() {
                       agent.schedule?.kind === 'every' ? `Every ${Math.round(agent.schedule.everyMs/60000)} min` : 'Unknown'}
                 </div>
                 <div style={styles.lastRun}>
-                  Last: {formatTime(agent.state?.lastRunAtMs, agent.lastRun)} • Next: {formatNextRun(agent.state?.nextRunAtMs)}
+                  Last: {formatTime(agent.state?.lastRunAtMs || agent.lastRunAtMs, agent.lastRun)} • Next: {formatNextRun(agent.state?.nextRunAtMs || agent.nextRunAtMs)}
                 </div>
                 {expanded === agent.id && (
                   <div style={styles.expanded}>
