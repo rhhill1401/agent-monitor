@@ -82,38 +82,27 @@ export default function AgentMonitor() {
   const isFetching = agentsFetching || progressFetching;
 
   const getStatusInfo = (agent) => {
-    // Handle both old format (state.lastStatus) and new format (status/lastStatus)
-    const status = agent.status || agent.state?.lastStatus || agent.lastStatus;
+    const status = agent.lastStatus || agent.status || agent.state?.lastStatus;
     const lastError = agent.lastError || agent.state?.lastError;
-    
+    const lastRunMs = agent.lastRunAtMs || agent.state?.lastRunAtMs;
+    const nextRun = agent.nextRunAtMs || agent.state?.nextRunAtMs;
+
     if (status === 'error' || lastError) {
       return { color: '#f85149', text: 'ERROR', icon: '🔴' };
     }
-    
-    // Handle both formats for lastRun (nested state or flat)
-    const lastRunMs = agent.state?.lastRunAtMs || agent.lastRunAtMs;
-    const lastRunStr = agent.lastRun;
-    
-    if (lastRunMs && (Date.now() - lastRunMs) < 60000) {
+    if (lastRunMs && (Date.now() - lastRunMs) < 120000) {
       return { color: '#3fb950', text: 'RUNNING', icon: '🟢' };
     }
-    
-    // If we have a lastRun string or lastRunMs, agent has run
-    if (status === 'ok' || lastRunStr || lastRunMs) {
+    if (status === 'ok' || lastRunMs) {
       return { color: '#3fb950', text: 'ACTIVE', icon: '🟢' };
     }
-    
-    const nextRun = agent.state?.nextRunAtMs || agent.nextRunAtMs;
     if (nextRun && nextRun > Date.now()) {
       return { color: '#d29922', text: 'SCHEDULED', icon: '⏰' };
     }
     if (nextRun && nextRun < Date.now()) {
       return { color: '#f85149', text: 'OVERDUE', icon: '🔴' };
     }
-    if (!lastRunStr && !lastRunMs) {
-      return { color: '#d29922', text: 'SCHEDULED', icon: '⏰' };
-    }
-    return { color: '#8b949e', text: 'IDLE', icon: '💤' };
+    return { color: '#d29922', text: 'SCHEDULED', icon: '⏰' };
   };
 
   const formatTime = (ms, lastRunStr) => {
@@ -368,11 +357,12 @@ export default function AgentMonitor() {
                 </div>
                 <div style={styles.schedule}>
                   ⏰ {typeof agent.schedule === 'string' ? agent.schedule :
-                      agent.schedule?.kind === 'cron' ? agent.schedule.expr : 
-                      agent.schedule?.kind === 'every' ? `Every ${Math.round(agent.schedule.everyMs/60000)} min` : 'Unknown'}
+                      agent.schedule?.kind === 'cron' ? agent.schedule.expr :
+                      agent.schedule?.kind === 'every' ? `Every ${Math.round(agent.schedule.everyMs/60000)} min` :
+                      agent.nextRunAtMs ? `Next in ${formatNextRun(agent.nextRunAtMs)}` : agent.name.replace(/-/g,' ')}
                 </div>
                 <div style={styles.lastRun}>
-                  Last: {formatTime(agent.state?.lastRunAtMs || agent.lastRunAtMs, agent.lastRun)} • Next: {formatNextRun(agent.state?.nextRunAtMs || agent.nextRunAtMs)}
+                  Last: {formatTime(agent.lastRunAtMs || agent.state?.lastRunAtMs, agent.lastRun)} • Next: {formatNextRun(agent.nextRunAtMs || agent.state?.nextRunAtMs)}
                 </div>
                 {expanded === agent.id && (
                   <div style={styles.expanded}>
@@ -393,4 +383,4 @@ export default function AgentMonitor() {
     </div>
   );
 }
-// Redeploy trigger: Wed Feb 25 00:15:00 CST 2026
+// Redeploy trigger: Wed Feb 25 00:22:00 CST 2026
