@@ -39,13 +39,13 @@ const pulseKeyframes = `
 
 // Fetch functions
 const fetchAgents = async () => {
-  const res = await fetch('/api/agents');
+  const res = await fetch('/api/agents', { cache: 'no-store' });
   if (!res.ok) throw new Error('Failed to fetch agents');
   return res.json();
 };
 
 const fetchProgress = async () => {
-  const res = await fetch('/api/progress');
+  const res = await fetch('/api/progress', { cache: 'no-store' });
   if (!res.ok) throw new Error('Failed to fetch progress');
   return res.json();
 };
@@ -345,9 +345,11 @@ export default function AgentMonitor() {
         <div style={{...styles.grid, marginTop: '20px'}}>
           {agents.map((agent) => {
             const status = getStatusInfo(agent);
+            const agentKey = agent.id || agent.name;
+            const nextRunMs = agent.nextRunAtMs || agent.state?.nextRunAtMs;
             return (
-              <div key={agent.id} style={{...styles.card, borderColor: status.color, borderWidth: status.text === 'ERROR' || status.text === 'OVERDUE' ? '2px' : '1px'}}
-                onClick={() => setExpanded(expanded === agent.id ? null : agent.id)}>
+              <div key={agentKey} style={{...styles.card, borderColor: status.color, borderWidth: status.text === 'ERROR' || status.text === 'OVERDUE' ? '2px' : '1px'}}
+                onClick={() => setExpanded(expanded === agentKey ? null : agentKey)}>
                 <div style={styles.cardHeader}>
                   <span style={styles.agentName}>{agent.name}</span>
                   <div style={{...styles.status, color: status.color}}>
@@ -359,12 +361,12 @@ export default function AgentMonitor() {
                   ⏰ {typeof agent.schedule === 'string' ? agent.schedule :
                       agent.schedule?.kind === 'cron' ? agent.schedule.expr :
                       agent.schedule?.kind === 'every' ? `Every ${Math.round(agent.schedule.everyMs/60000)} min` :
-                      agent.nextRunAtMs ? `Next in ${formatNextRun(agent.nextRunAtMs)}` : agent.name.replace(/-/g,' ')}
+                      nextRunMs ? `Next in ${formatNextRun(nextRunMs)}` : agent.name.replace(/-/g,' ')}
                 </div>
                 <div style={styles.lastRun}>
                   Last: {formatTime(agent.lastRunAtMs || agent.state?.lastRunAtMs, agent.lastRun)} • Next: {formatNextRun(agent.nextRunAtMs || agent.state?.nextRunAtMs)}
                 </div>
-                {expanded === agent.id && (
+                {expanded === agentKey && (
                   <div style={styles.expanded}>
                     <div><strong>ID:</strong> {agent.id?.slice(0,8)}...</div>
                     <div><strong>Duration:</strong> {agent.state?.lastDurationMs ? `${(agent.state.lastDurationMs/1000).toFixed(1)}s` : 'N/A'}</div>
